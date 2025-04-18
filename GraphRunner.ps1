@@ -6292,168 +6292,113 @@ function Get-SharePointSiteURLs{
 
 }
 
-function Invoke-SearchSharePointAndOneDrive{
-    <#
-    .SYNOPSIS
-
-        This module uses the Graph search API to search for specific terms in all SharePoint and OneDrive drives available to the logged in user. It prompts the user which files they want to download.   
-        Author: Beau Bullock (@dafthack)
-        License: MIT
-        Required Dependencies: None
-        Optional Dependencies: None
-
-    .DESCRIPTION
-        
-       This module uses the Graph search API to search for specific terms in all SharePoint and OneDrive drives available to the logged in user. It prompts the user which files they want to download.
-
-    .PARAMETER Tokens
-
-        Pass the $tokens global variable after authenticating to this parameter
-
-    .PARAMETER SearchTerm
-
-         The term you want to search for. This accepts KQL queries so you can use terms like "filetype", "content", and more.
-
-    .PARAMETER ResultCount
-
-        The amount of files returned in the search results (default = 25)
-
-    .PARAMETER OutFile
-
-        File to output a list of hits to
-
-    .PARAMETER PageResults
-
-        Using paging it will return all possible results for a search term
-
-    .EXAMPLE
-        
-        C:\PS> Invoke-SearchSharePointAndOneDrive -Tokens $tokens -SearchTerm 'password filetype:xlsx'
-        -----------
-        This will search through the all SharePoint and OneDrive drives accessible to the current user for the term password.
-    #>
+function Invoke-SearchSharePointAndOneDrive {
     param(
-    [Parameter(Position = 0, Mandatory = $false)]
-    [object[]]
-    $Tokens = "",
-    [Parameter(Position = 1, Mandatory = $true)]
-    [string]
-    $SearchTerm = "",
-    [Parameter(Position = 2, Mandatory = $false)]
-    [string]
-    $ResultCount = "25",
-    [Parameter(Position = 3, Mandatory = $false)]
-    [string]
-    $DetectorName = "Custom",
-    [Parameter(Position = 4, Mandatory = $false)]
-    [string]
-    $OutFile = "",
-    [switch]
-    $ReportOnly,
-    [switch]
-    $PageResults,
-    [switch]
-    $GraphRun,
-    [Parameter(Mandatory=$False)]
-    [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
-    [String]$Device = 'Windows',
-    [Parameter(Mandatory=$False)]
-    [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
-    [String]$Browser = 'Edge'
+        [Parameter(Position = 0, Mandatory = $false)]
+        [object[]]$Tokens = "",
+        [Parameter(Position = 1, Mandatory = $true)]
+        [string]$SearchTerm = "",
+        [Parameter(Position = 2, Mandatory = $false)]
+        [string]$ResultCount = "25",
+        [Parameter(Position = 3, Mandatory = $false)]
+        [string]$DetectorName = "Custom",
+        [Parameter(Position = 4, Mandatory = $false)]
+        [string]$OutFile = "",
+        [switch]$ReportOnly,
+        [Parameter()]
+        [Alias("PageResults")]
+        [int]$MaxPages = 0,
+        [switch]$GraphRun,
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Mac','Windows','AndroidMobile','iPhone')]
+        [string]$Device = 'Windows',
+        [Parameter(Mandatory = $false)]
+        [ValidateSet('Android','IE','Chrome','Firefox','Edge','Safari')]
+        [string]$Browser = 'Edge'
     )
+
     if ($Device) {
-		if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
-		}
-		else {
-			$UserAgent = Invoke-ForgeUserAgent -Device $Device
-		}
-	}
-	else {
-	   if ($Browser) {
-			$UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
-	   } 
-	   else {
-			$UserAgent = Invoke-ForgeUserAgent
-	   }
-	}
-    if($Tokens){
-        #Suppressing output if GraphRun module is used
-        if (!$GraphRun){
-            Write-Host -ForegroundColor yellow "[*] Using the provided access tokens."
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device -Browser $Browser
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent -Device $Device
+        }
+    } else {
+        if ($Browser) {
+            $UserAgent = Invoke-ForgeUserAgent -Browser $Browser 
+        } else {
+            $UserAgent = Invoke-ForgeUserAgent
         }
     }
-    else{
-         # Login
-         Write-Host -ForegroundColor yellow "[*] First, you need to login." 
-         Write-Host -ForegroundColor yellow "[*] If you already have tokens you can use the -Tokens parameter to pass them to this function."
-         while($auth -notlike "Yes"){
-                Write-Host -ForegroundColor cyan "[*] Do you want to authenticate now (yes/no)?"
-                $answer = Read-Host 
-                $answer = $answer.ToLower()
-                if ($answer -eq "yes" -or $answer -eq "y") {
-                    Write-Host -ForegroundColor yellow "[*] Running Get-GraphTokens now..."
-                    $tokens = Get-GraphTokens -ExternalCall
-                    $auth = "Yes"
-                } elseif ($answer -eq "no" -or $answer -eq "n") {
-                    Write-Host -ForegroundColor Yellow "[*] Quitting..."
-                    return
-                } else {
-                    Write-Host -ForegroundColor red "Invalid input. Please enter Yes or No."
-                }
+
+    if ($Tokens) {
+        if (!$GraphRun) {
+            Write-Host -ForegroundColor Yellow "[*] Using the provided access tokens."
+        }
+    } else {
+        Write-Host -ForegroundColor Yellow "[*] First, you need to login." 
+        while ($auth -notlike "Yes") {
+            Write-Host -ForegroundColor Cyan "[*] Do you want to authenticate now (yes/no)?"
+            $answer = Read-Host
+            $answer = $answer.ToLower()
+            if ($answer -eq "yes" -or $answer -eq "y") {
+                Write-Host -ForegroundColor Yellow "[*] Running Get-GraphTokens now..."
+                $tokens = Get-GraphTokens -ExternalCall
+                $auth = "Yes"
+            } elseif ($answer -eq "no" -or $answer -eq "n") {
+                Write-Host -ForegroundColor Yellow "[*] Quitting..."
+                return
+            } else {
+                Write-Host -ForegroundColor Red "Invalid input. Please enter Yes or No."
             }
+        }
     }
+
     $access_token = $tokens.access_token   
     [string]$refresh_token = $tokens.refresh_token 
-
     $graphApiUrl = "https://graph.microsoft.com/v1.0/search/query"
 
-    # Define the headers with the access token and content type
     $headers = @{
-    "Authorization" = "Bearer $access_token"
-    "Content-Type" = "application/json"
-    "User-Agent" = $UserAgent
+        "Authorization" = "Bearer $access_token"
+        "Content-Type"  = "application/json"
+        "User-Agent"    = $UserAgent
     }
 
-    # Define the search query
-    $searchQuery = @{ requests = @( @{
-        entityTypes = @("driveItem")
-        query = @{
-            queryString = $SearchTerm
-        }
-        from = 0
-        size = $ResultCount
-        }
-    )
+    $searchQuery = @{
+        requests = @(
+            @{
+                entityTypes = @("driveItem")
+                query = @{
+                    queryString = $SearchTerm
+                }
+                from = 0
+                size = $ResultCount
+            }
+        )
     }
 
-    # Convert the search query to JSON format
     $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
-
-    # Perform the HTTP POST request to search emails
     $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-
 
     $resultarray = @()
     $total = $response.value[0].hitsContainers[0].total
-    if(!$GraphRun){
-        Write-Host -ForegroundColor yellow "[*] Found $total matches for search term $searchTerm"
+    if (!$GraphRun) {
+        Write-Host -ForegroundColor Yellow "[*] Found $total matches for search term '$SearchTerm'"
+    } elseif ([int]$total -gt 0) {
+        Write-Host -ForegroundColor Yellow "[*] Found $total matches for detector: $DetectorName"
     }
-    else{
-        if([int]$total -gt 0){
-            Write-Host -ForegroundColor yellow "[*] Found $total matches for detector: $DetectorName"
-        }
-    }
-    if ([int]$total -gt 0){
+
+    if ([int]$total -gt 0) {
         $itemnumber = 0
-       
+        $pageNumber = 1
+
         while ($itemnumber -lt $total) {
             $resultsList = @()
             foreach ($hit in $response.value[0].hitsContainers[0].hits) {
-            $filename = $hit.resource.name
-            $CreatedDate = $hit.resource.fileSystemInfo.createdDateTime
-            $LastModifiedDate = $hit.resource.lastModifiedDateTime
-            $sizeInBytes = $hit.resource.size
+                $filename = $hit.resource.name
+                $CreatedDate = $hit.resource.fileSystemInfo.createdDateTime
+                $LastModifiedDate = $hit.resource.lastModifiedDateTime
+                $sizeInBytes = $hit.resource.size
                 if ($sizeInBytes -lt 1024) {
                     $sizeFormatted = "{0:N0} Bytes" -f $sizeInBytes
                 } elseif ($sizeInBytes -lt 1048576) {
@@ -6463,119 +6408,98 @@ function Invoke-SearchSharePointAndOneDrive{
                 } else {
                     $sizeFormatted = "{0:N2} GB" -f ($sizeInBytes / 1073741824)
                 }
-            $summary = $hit.summary
-            $location = $hit.resource.webUrl
-            $driveid = $hit.resource.parentReference.driveId
-            $itemid = $hit.resource.id
+                $summary = $hit.summary
+                $location = $hit.resource.webUrl
+                $driveid = $hit.resource.parentReference.driveId
+                $itemid = $hit.resource.id
 
-            $resultInfo = @{
-                result = $itemnumber
-                filename = $filename
-                driveitemids = ($driveid + ":" + $itemid)
-            }
-            $LogInfo = @{
-                "Detector Name" = $DetectorName
-                "File Name" = $filename
-                "Size" = $sizeFormatted
-                "Location" = $location
-                "DriveItemID" = ($driveid + ":" + $itemid)
-                "Preview" = $summary
-                "Last Modified Date" = $LastModifiedDate
-            }
-            
-            $resultarray += New-Object PSObject -Property $resultInfo
-            $resultsList += New-Object PSObject -Property $LogInfo
-            if(!$ReportOnly){
-                Write-Host "Result [$itemnumber]"
-                Write-Host "File Name: $filename"
-                Write-Host "Location: $location"
-                Write-Host "Created Date: $CreatedDate"
-                Write-Host "Last Modified Date: $LastModifiedDate"
-                Write-Host "Size: $sizeFormatted"
-                Write-Host "File Preview: $summary"
-                Write-Host "DriveID & Item ID: $driveid\:$itemid"
-                Write-Host ("=" * 80) 
+                $resultInfo = @{
+                    result       = $itemnumber
+                    filename     = $filename
+                    driveitemids = ($driveid + ":" + $itemid)
                 }
-            $itemnumber++
+                $LogInfo = @{
+                    "Detector Name"      = $DetectorName
+                    "File Name"           = $filename
+                    "Size"                = $sizeFormatted
+                    "Location"            = $location
+                    "DriveItemID"         = ($driveid + ":" + $itemid)
+                    "Preview"             = $summary
+                    "Last Modified Date"  = $LastModifiedDate
+                }
+                
+                $resultarray += New-Object PSObject -Property $resultInfo
+                $resultsList += New-Object PSObject -Property $LogInfo
+                if (!$ReportOnly) {
+                    Write-Host "Result [$itemnumber]"
+                    Write-Host "File Name: $filename"
+                    Write-Host "Location: $location"
+                    Write-Host "Created Date: $CreatedDate"
+                    Write-Host "Last Modified Date: $LastModifiedDate"
+                    Write-Host "Size: $sizeFormatted"
+                    Write-Host "File Preview: $summary"
+                    Write-Host "DriveID & Item ID: $driveid\:$itemid"
+                    Write-Host ("=" * 80)
+                }
+                $itemnumber++
             }
-            if($OutFile){
-                if(!$GraphRun){
-                    Write-Host -ForegroundColor yellow "[*] Writing results to $OutFile"
+
+            if ($OutFile) {
+                if (!$GraphRun) {
+                    Write-Host -ForegroundColor Yellow "[*] Writing results to $OutFile"
                 }
                 $resultsList | Export-Csv -Path $OutFile -NoTypeInformation -Append
             }
-            if ($itemnumber -lt $total -and $PageResults) {
+
+            if ($itemnumber -lt $total) {
+                if (($MaxPages -gt 0) -and ($pageNumber -ge $MaxPages)) {
+                    Write-Host -ForegroundColor Yellow "[*] Reached the maximum number of pages ($MaxPages). Stopping search."
+                    break
+                }
+                Write-Host -ForegroundColor Cyan "[*] Fetching page $($pageNumber + 1)..."
                 $searchQuery.requests[0].from += $ResultCount
                 $searchQueryJson = $searchQuery | ConvertTo-Json -Depth 10
                 $response = Invoke-RestMethod -Uri $graphApiUrl -Headers $headers -Method Post -Body $searchQueryJson
-            }
-            If(!$PageResults){
-                $itemnumber = $total
+                $pageNumber++
+            } else {
+                break
             }
         }
-        if(!$ReportOnly){
-        $done = $false
 
-        while ($done -ne $true) {
-            if ($done -eq "yes") {
-                Write-Host -ForegroundColor Cyan "[*] Do you want to download any more files? (Yes/No/All)"
-                $anotherDownload = Read-Host
-                $anotherDownload = $anotherDownload.ToLower()
-                if ($anotherDownload -eq "yes" -or $anotherDownload -eq "y") {
-                    Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
-                    $resulttodownload = Read-Host
-                    $resultstodl = $resulttodownload.split(",")
-                    foreach ($res in $resultstodl){
-                        $specificfileinfo = $resultarray[$res]
-                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
-                    }
-                } elseif ($anotherDownload -eq "no" -or $anotherDownload -eq "n") {
-                    Write-Output "[*] Quitting..."
-                    $done = $true
-                    break
-                } elseif ($answer -eq "all") {
-                    Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
-                        for ($res=0; $res -lt $itemnumber; $res++){
-                            $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
-                        }
-                } else {
-                    Write-Output "Invalid input. Please enter Yes or No."
-                }
-            } else {
+        if (!$ReportOnly) {
+            $done = $false
+            while ($done -ne $true) {
                 Write-Host -ForegroundColor Cyan "[*] Do you want to download any of these files? (Yes/No/All)"
                 $answer = Read-Host
                 $answer = $answer.ToLower()
 
                 if ($answer -eq "yes" -or $answer -eq "y") {
-                    $done = "yes"  
                     Write-Host -ForegroundColor Cyan '[*] Enter the result number(s) of the file(s) that you want to download. Ex. "0,10,24"'
                     $resulttodownload = Read-Host
-                    $resultstodl = $resulttodownload.split(",")
-                    foreach ($res in $resultstodl){
+                    $resultstodl = $resulttodownload.Split(",")
+                    foreach ($res in $resultstodl) {
                         $specificfileinfo = $resultarray[$res]
                         Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
                     }
+                    $done = $true
+                } elseif ($answer -eq "all") {
+                    Write-Host -ForegroundColor Cyan "[***] WARNING - Downloading ALL $itemnumber matches."
+                    for ($res = 0; $res -lt $itemnumber; $res++) {
+                        $specificfileinfo = $resultarray[$res]
+                        Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
+                    }
+                    $done = $true
                 } elseif ($answer -eq "no" -or $answer -eq "n") {
                     Write-Output "[*] Quitting..."
                     $done = $true
-                    break
-
-                } elseif ($answer -eq "all") {
-                    $done = "yes"
-                    Write-Host -ForegroundColor Cyan '[***] WARNING - Downloading ALL' + $itemnumber 'matches.'
-                        for ($res=0; $res -lt $itemnumber; $res++){
-                            $specificfileinfo = $resultarray[$res]
-                            Invoke-DriveFileDownload -Tokens $tokens -DriveItemIDs $specificfileinfo.driveitemids -FileName $specificfileinfo.filename -Device $Device -Browser $Browser
-                        }
                 } else {
-                    Write-Output "Invalid input. Please enter Yes or No."
+                    Write-Output "Invalid input. Please enter Yes, No or All."
                 }
             }
         }
-        }    
     }
 }
+
 
 function Invoke-DriveFileDownload{
     <#
