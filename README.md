@@ -1,5 +1,5 @@
 # GraphRunner-uptaded-version
-Updated version of the Invoke-SearchSharePointAndOneDrive function
+Updated version of Invoke-SearchSharePointAndOneDrive function
 
 
 
